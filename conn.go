@@ -1,9 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/websocket"
 )
@@ -13,35 +13,48 @@ var upgrader = websocket.Upgrader{
     WriteBufferSize: 1024,
 }
 
-
-var (
-	newline = []byte{'\n'}
-	space   = []byte{' '}
-)
-
-
 type Conn struct {
 	ws *websocket.Conn
-	send chan []byte
+	send chan Response
+	err chan ErrResponse
 }
 
+type Data struct {
+	GameID string `json:"id,omitempty"`
+	Move string `json:"move,omitempty"`
+}
+
+type Message struct {
+	Type string	`json:"type"`
+	Data Data `json:"data,omitempty"`
+}
 
 // readPump pumps messages from the websocket connection to the hub.
 func (c *Conn) readPump() {
 	defer func() {
+		log.Println(c,"socket is closing")
 		hub.unregister <- c
 		c.ws.Close()
 	}()
 	for {
-		_, message, err := c.ws.ReadMessage()
+		m := &Message{}
+		err := c.ws.ReadJSON(m)
+		log.Printf("Received %#v\n", m)
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
 				log.Printf("error: %v", err)
 			}
 			break
 		}
-		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		hub.move <- Move{c, string(message)}
+		switch strings.ToLower(m.Type) {
+		case "create":
+			hub.create <- c
+		case "join":
+			hub.join <- Join{Conn: c, GameID: m.Data.GameID}
+		case "move":
+			hub.move <- Move{Conn: c, move: m.Data.Move}
+		}
+
 	}
 }
 
@@ -63,23 +76,10 @@ func (c *Conn) writePump() {
 				c.write(websocket.CloseMessage, []byte{})
 				return
 			}
-
-			w, err := c.ws.NextWriter(websocket.TextMessage)
-			if err != nil {
+			if err := c.ws.WriteJSON(message); err != nil {
 				return
 			}
-			w.Write(message)
 
-			// Add queued chat messages to the current websocket message.
-			n := len(c.send)
-			for i := 0; i < n; i++ {
-				w.Write(newline)
-				w.Write(<-c.send)
-			}
-
-			if err := w.Close(); err != nil {
-				return
-			}
 		}
 	}
 }
@@ -91,8 +91,11 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		return
 	}
-	conn := &Conn{send: make(chan []byte, 256), ws: ws}
+	conn := &Conn{
+		send: make(chan Response),
+		err: make(chan ErrResponse),
+		 ws: ws}
 	hub.register <- conn
-	go conn.writePump()
-	conn.readPump()
+	go conn.readPump()
+	conn.writePump()
 }
