@@ -144,10 +144,19 @@ func (h *Hub) run() {
 				}
 				break
 			}
-			//TODO: then check if move leads to something. e.g. checkmate
-			res := newResponse(g.game, g.id, fmt.Sprintf("%s is played", move))
-			g.white.send <- res
-			g.black.send <- res
+			event := fmt.Sprintf("%s is played", move)
+			if g.game.Method() != chess.NoMethod {
+				event = fmt.Sprintf("Game Over: %v %v", g.game.Method(), g.game.Outcome())
+				g.ongoing = false
+				//TODO: delete the game or sth./ check g.ongoing b4 moving
+			}
+			res := newResponse(g.game, g.id, event)
+			if g.white != nil {
+				g.white.send <- res
+			}
+			if g.black != nil {
+				g.black.send <- res
+			}
 		}
 	}
 }
