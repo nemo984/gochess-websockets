@@ -15,8 +15,7 @@ var upgrader = websocket.Upgrader{
 
 type Conn struct {
 	ws *websocket.Conn
-	send chan Response
-	err chan ErrResponse
+	send chan interface{}
 }
 
 type Data struct {
@@ -25,7 +24,7 @@ type Data struct {
 }
 
 type Message struct {
-	Type string	`json:"type"`
+	Action string	`json:"action"`
 	Data Data `json:"data,omitempty"`
 }
 
@@ -46,7 +45,7 @@ func (c *Conn) readPump() {
 			}
 			break
 		}
-		switch strings.ToLower(m.Type) {
+		switch strings.ToLower(m.Action) {
 		case "create":
 			hub.create <- c
 		case "join":
@@ -79,7 +78,6 @@ func (c *Conn) writePump() {
 			if err := c.ws.WriteJSON(message); err != nil {
 				return
 			}
-
 		}
 	}
 }
@@ -92,9 +90,9 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	conn := &Conn{
-		send: make(chan Response),
-		err: make(chan ErrResponse),
-		 ws: ws}
+		send: make(chan interface{}),
+		 ws: ws,
+		}
 	hub.register <- conn
 	go conn.readPump()
 	conn.writePump()
