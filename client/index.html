@@ -22,7 +22,7 @@
         <meta charset="UTF-8" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Example</title>
+        <title>Client Example</title>
     </head>
     <body>
         <div class="container">
@@ -61,12 +61,16 @@
         var $gameID = $("#game_id");
         var inGame = false;
 
+        //Start off with white color
+        var myColor = "w";
+
         function onDragStart(source, piece, position, orientation) {
             if (game.game_over()) return false;
-
+            c1 = inGame ? myColor : "b";
+            c2 = inGame ? myColor : "w";
             if (
-                (game.turn() === "w" && piece.search(/^b/) !== -1) ||
-                (game.turn() === "b" && piece.search(/^w/) !== -1)
+                (game.turn() !== c1 && piece.search(/^b/) !== -1) ||
+                (game.turn() !== c2 && piece.search(/^w/) !== -1)
             ) {
                 return false;
             }
@@ -86,6 +90,9 @@
             console.log(move);
             updateStatus();
             if (inGame) {
+                if (ws.readyState === WebSocket.CLOSED) {
+                    alert("Websocket is closed");
+                }
                 ws.send(
                     JSON.stringify({
                         action: "move",
@@ -141,18 +148,28 @@
         ws.onmessage = (e) => {
             json = JSON.parse(e.data);
             console.log(json);
+
             if (json.hasOwnProperty("pgn") && json.hasOwnProperty("id")) {
                 inGame = true;
                 $gameID.html(json.id);
                 game.load_pgn(json.pgn);
                 board.position(json.fen);
             }
+
+            if (json.hasOwnProperty("message")) {
+                alert(json.message);
+            }
+
             updateStatus();
         };
 
         $("#flipOrientationBtn").on("click", board.flip);
 
         $(".createBtn").on("click", () => {
+            if (ws.readyState === WebSocket.CLOSED) {
+                alert("Websocket is closed");
+            }
+
             ws.send(
                 JSON.stringify({
                     action: "create",
@@ -161,6 +178,9 @@
         });
 
         $(".joinBtn").on("click", () => {
+            if (ws.readyState === WebSocket.CLOSED) {
+                alert("Websocket is closed");
+            }
             console.log("Trying to join ", $("#game_id_input").val());
             ws.send(
                 JSON.stringify({
@@ -168,6 +188,7 @@
                     data: { id: $("#game_id_input").val() },
                 })
             );
+            myColor = "b";
         });
     </script>
 </html>
