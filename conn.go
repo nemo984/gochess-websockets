@@ -9,29 +9,29 @@ import (
 )
 
 var upgrader = websocket.Upgrader{
-    ReadBufferSize:  1024,
-    WriteBufferSize: 1024,
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
 }
 
 type Conn struct {
-	ws *websocket.Conn
+	ws   *websocket.Conn
 	send chan interface{}
 }
 
 type Data struct {
 	GameID string `json:"id,omitempty"`
-	Move string `json:"move,omitempty"`
+	Move   string `json:"move,omitempty"`
 }
 
 type Message struct {
-	Action string	`json:"action"`
-	Data Data `json:"data,omitempty"`
+	Action string `json:"action"`
+	Data   Data   `json:"data,omitempty"`
 }
 
 // readPump pumps messages from the websocket connection to the hub.
 func (c *Conn) readPump() {
 	defer func() {
-		log.Println(c,"socket is closing")
+		log.Println(c, "socket is closing")
 		hub.unregister <- c
 		c.ws.Close()
 	}()
@@ -84,15 +84,15 @@ func (c *Conn) writePump() {
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
 	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
-	ws, err := upgrader.Upgrade(w,r, nil)
+	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 	conn := &Conn{
 		send: make(chan interface{}),
-		 ws: ws,
-		}
+		ws:   ws,
+	}
 	hub.register <- conn
 	go conn.readPump()
 	conn.writePump()

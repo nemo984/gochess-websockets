@@ -11,51 +11,51 @@ import (
 )
 
 type Game struct {
-	id string
-	game *chess.Game
-	white *Conn
-	black *Conn
+	id      string
+	game    *chess.Game
+	white   *Conn
+	black   *Conn
 	ongoing bool
 }
 
 //Hub maintains set of ongoing games/ events
 type Hub struct {
-	games map[string]*Game
+	games           map[string]*Game
 	gameConnections map[*Conn]string
-	register chan *Conn 
-	unregister chan *Conn 
-	create chan *Conn
-	join chan Join
-	move chan Move
+	register        chan *Conn
+	unregister      chan *Conn
+	create          chan *Conn
+	join            chan Join
+	move            chan Move
 }
 
 var hub = Hub{
-	games: make(map[string]*Game),
+	games:           make(map[string]*Game),
 	gameConnections: make(map[*Conn]string),
-	register: make(chan *Conn),
-	unregister: make(chan *Conn),
-	create: make(chan *Conn),
-	move: make(chan Move),
-	join: make(chan Join),
+	register:        make(chan *Conn),
+	unregister:      make(chan *Conn),
+	create:          make(chan *Conn),
+	move:            make(chan Move),
+	join:            make(chan Join),
 }
 
 type Move struct {
 	Conn *Conn
-	move	string
+	move string
 }
 
 type Join struct {
-	Conn *Conn
+	Conn   *Conn
 	GameID string
 }
 
 //whatever you want to send back
 type Response struct {
 	GameID string `json:"id"`
-	Event string `json:"event"`
-	FEN	string `json:"fen"`
-	PGN string `json:"pgn"`
-} 
+	Event  string `json:"event"`
+	FEN    string `json:"fen"`
+	PGN    string `json:"pgn"`
+}
 
 //Response in case of error
 type ErrResponse struct {
@@ -66,20 +66,20 @@ func (h *Hub) run() {
 	log.Println("Hub is Listening")
 	defer log.Println("Hub is dead")
 	//TODO: put the cases in their own func/file
-	//TODO: resign, draw 
+	//TODO: resign, draw
 	for {
 		select {
 		case conn := <-h.register:
 			log.Println("New connection: ", conn)
-		
+
 		case conn := <-h.create:
 			log.Println("New Game Created By: ", conn)
 			gameID := RandStringRunes(5)
-			log.Println("Game ID:",gameID)
+			log.Println("Game ID:", gameID)
 			h.games[gameID] = &Game{
-				id: gameID,
-				game: chess.NewGame(),
-				white: conn, //TODO: optionally create with color
+				id:      gameID,
+				game:    chess.NewGame(),
+				white:   conn, //TODO: optionally create with color
 				ongoing: true,
 			}
 			h.gameConnections[conn] = gameID
@@ -87,8 +87,8 @@ func (h *Hub) run() {
 
 		case join := <-h.join:
 			conn := join.Conn
-			log.Println(conn,"trying to join", join.GameID)
-			if g,ok := h.games[join.GameID]; ok {
+			log.Println(conn, "trying to join", join.GameID)
+			if g, ok := h.games[join.GameID]; ok {
 				if g.black != nil && g.white != nil {
 					conn.send <- ErrResponse{Message: "Game already fulled"}
 					break
@@ -100,18 +100,17 @@ func (h *Hub) run() {
 				}
 				h.gameConnections[conn] = join.GameID
 
-				log.Println(conn, "join Game:",join.GameID,"Success!")
+				log.Println(conn, "join Game:", join.GameID, "Success!")
 				res := newResponse(g.game, join.GameID, "Player join game")
 				g.white.send <- res
 				g.black.send <- res
 			}
 
-
 		case conn := <-h.unregister:
-			log.Println(conn,"unregister")
+			log.Println(conn, "unregister")
 
 		case m := <-h.move:
-			conn,move := m.Conn, m.move
+			conn, move := m.Conn, m.move
 			log.Println(conn, "Plays", move)
 			gameID, ok := h.gameConnections[conn]
 			if !ok {
@@ -146,22 +145,21 @@ func (h *Hub) run() {
 				break
 			}
 			//TODO: then check if move leads to something. e.g. checkmate
-			res := newResponse(g.game, g.id, fmt.Sprintf("%s is played",move))
+			res := newResponse(g.game, g.id, fmt.Sprintf("%s is played", move))
 			g.white.send <- res
 			g.black.send <- res
 		}
 	}
 }
 
-func newResponse(game *chess.Game,id string, event string) Response {
+func newResponse(game *chess.Game, id string, event string) Response {
 	return Response{
 		GameID: id,
-		Event: event, //TODO: event enum?
-		FEN: game.FEN(),
-		PGN: strings.TrimSpace(game.String()),
+		Event:  event, //TODO: event enum?
+		FEN:    game.FEN(),
+		PGN:    strings.TrimSpace(game.String()),
 	}
 }
-
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
