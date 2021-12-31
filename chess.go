@@ -93,17 +93,25 @@ func (h *Hub) run() {
 					conn.send <- ErrResponse{Message: "Game already fulled"}
 					break
 				}
+				var color string
 				if g.white == nil {
 					g.white = conn
+					color = "w"
 				} else {
 					g.black = conn
+					color = "b"
 				}
 				h.gameConnections[conn] = join.GameID
 
-				log.Println(conn, "join Game:", join.GameID, "Success!")
+				log.Println(conn, "join Game:", join.GameID, "as", color)
+				conn.send <- newResponse(g.game, join.GameID, "Game Joined")
 				res := newResponse(g.game, join.GameID, "Player join game")
-				g.white.send <- res
-				g.black.send <- res
+				if color == "w" {
+					g.black.send <- res
+				} else {
+					g.white.send <- res
+				}
+
 			}
 
 		case conn := <-h.unregister:
@@ -161,8 +169,8 @@ func (h *Hub) run() {
 	}
 }
 
-func newResponse(game *chess.Game, id string, event string) Response {
-	return Response{
+func newResponse(game *chess.Game, id string, event string) *Response {
+	return &Response{
 		GameID: id,
 		Event:  event, //TODO: event enum?
 		FEN:    game.FEN(),

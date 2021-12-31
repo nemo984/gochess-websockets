@@ -118,6 +118,16 @@ ws.onmessage = (e) => {
         $gameID.html(json.id);
         game.load_pgn(json.pgn);
         board.position(json.fen);
+        updateStatus();
+
+        if (json.event === "Game Created") {
+            myColor = "w";
+        }
+
+        if (json.event === "Game Joined") {
+            myColor = "b";
+            return;
+        }
 
         //TODO: maybe also send back game status & color that play the move
         //Sound effects
@@ -131,7 +141,6 @@ ws.onmessage = (e) => {
                 playSfx(moveSfx);
             }
         }
-        updateStatus();
     }
 
     if (json.hasOwnProperty("message")) {
@@ -157,12 +166,14 @@ $(".joinBtn").on("click", () => {
     if (ws.readyState === WebSocket.CLOSED) {
         alert("Websocket is closed");
     }
-    console.log("Trying to join ", $("#game_id_input").val());
+    let id = $("#game_id_input").val();
+    if (id === "") {
+        alert("GAME ID INPUT IS EMPTY");
+    }
     ws.send(
         JSON.stringify({
             action: "join",
-            data: { id: $("#game_id_input").val() },
+            data: { id: id },
         })
     );
-    myColor = "b";
 });
