@@ -96,19 +96,19 @@ func (h *Hub) run() {
 				var color string
 				if g.white == nil {
 					g.white = conn
-					color = "w"
+					color = "white"
 				} else {
 					g.black = conn
-					color = "b"
+					color = "black"
 				}
 				h.gameConnections[conn] = join.GameID
 
 				log.Println(conn, "join Game:", join.GameID, "as", color)
-				conn.send <- newResponse(g.game, join.GameID, "Game Joined")
+				conn.send <- newResponse(g.game, join.GameID, "Game joined as " + color)
 				res := newResponse(g.game, join.GameID, "Player join game")
-				if color == "w" {
+				if color == "w" && g.black != nil {
 					g.black.send <- res
-				} else {
+				} else if color == "b" && g.white != nil {
 					g.white.send <- res
 				}
 
@@ -116,6 +116,16 @@ func (h *Hub) run() {
 
 		case conn := <-h.unregister:
 			log.Println(conn, "unregister")
+			if id, ok := h.gameConnections[conn]; ok {
+				if g, ok := h.games[id]; ok {
+					if g.white == conn {
+						g.white = nil
+					} else {
+						g.black = nil
+					}
+				}
+				delete(h.gameConnections, conn)
+			}
 
 		case m := <-h.move:
 			conn, move := m.Conn, m.move

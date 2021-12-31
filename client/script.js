@@ -97,6 +97,21 @@ function updateStatus() {
     $pgn.html(game.pgn());
 }
 
+function joinGame(id) {
+    if (ws.readyState === WebSocket.CLOSED) {
+        alert("Websocket is closed");
+    }
+    if (id === "") {
+        alert("GAME ID INPUT IS EMPTY");
+    }
+    ws.send(
+        JSON.stringify({
+            action: "join",
+            data: { id: id },
+        })
+    );
+}
+
 var config = {
     draggable: true,
     position: "start",
@@ -109,26 +124,37 @@ updateStatus();
 
 host = window.location.hostname + ":" + window.location.port;
 ws = new WebSocket(`ws://${host}/ws`);
+
+ws.onopen = (e) => {
+    const gameID = sessionStorage.getItem("id");
+    if (gameID !== null) {
+        joinGame(gameID);
+    }
+};
+
 ws.onmessage = (e) => {
     json = JSON.parse(e.data);
     console.log(json);
 
     if (json.hasOwnProperty("pgn") && json.hasOwnProperty("id")) {
+        sessionStorage.setItem("id", json.id);
+
         inGame = true;
         $gameID.html(json.id);
         game.load_pgn(json.pgn);
-        board.position(json.fen);
+        board.position(json.fen, false);
         updateStatus();
-
-        if (json.event === "Game Created") {
-            myColor = "w";
+        //make better event
+        switch (json.event) {
+            case ("Game Created", "Game joined as white"):
+                myColor = "w";
+                return;
+            case "Game joined as black":
+                myColor = "b";
+                board.flip();
+                return;
         }
-
-        if (json.event === "Game Joined") {
-            myColor = "b";
-            return;
-        }
-
+        //Default: move event
         //TODO: maybe also send back game status & color that play the move
         //Sound effects
         if (
@@ -145,6 +171,7 @@ ws.onmessage = (e) => {
 
     if (json.hasOwnProperty("message")) {
         alert(json.message);
+        sessionStorage.clear();
     }
 };
 
@@ -163,17 +190,6 @@ $(".createBtn").on("click", () => {
 });
 
 $(".joinBtn").on("click", () => {
-    if (ws.readyState === WebSocket.CLOSED) {
-        alert("Websocket is closed");
-    }
-    let id = $("#game_id_input").val();
-    if (id === "") {
-        alert("GAME ID INPUT IS EMPTY");
-    }
-    ws.send(
-        JSON.stringify({
-            action: "join",
-            data: { id: id },
-        })
-    );
+    id = $("#game_id_input").val();
+    joinGame(id);
 });
