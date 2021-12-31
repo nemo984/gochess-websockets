@@ -104,7 +104,7 @@ func (h *Hub) run() {
 				h.gameConnections[conn] = join.GameID
 
 				log.Println(conn, "join Game:", join.GameID, "as", color)
-				conn.send <- newResponse(g.game, join.GameID, "Game joined as " + color)
+				conn.send <- newResponse(g.game, join.GameID, "Game joined as "+color)
 				res := newResponse(g.game, join.GameID, "Player join game")
 				if color == "w" && g.black != nil {
 					g.black.send <- res

@@ -193,3 +193,9 @@ $(".joinBtn").on("click", () => {
     id = $("#game_id_input").val();
     joinGame(id);
 });
+
+$(".leaveBtn").on("click", () => {
+    console.log("let me out");
+    sessionStorage.clear();
+    window.location.reload();
+});

@@ -36,8 +36,7 @@
     display: flex;
 }
 
-.createBtn,
-.joinBtn {
+.btn {
     margin-top: 1rem;
     cursor: pointer;
     background-color: beige;
