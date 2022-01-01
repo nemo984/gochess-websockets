@@ -18,35 +18,9 @@ type Game struct {
 	ongoing bool
 }
 
-//Hub maintains set of ongoing games/ events
-type Hub struct {
+type Games struct {
 	games           map[string]*Game
 	gameConnections map[*Conn]string
-	register        chan *Conn
-	unregister      chan *Conn
-	create          chan *Conn
-	join            chan Join
-	move            chan Move
-}
-
-var hub = Hub{
-	games:           make(map[string]*Game),
-	gameConnections: make(map[*Conn]string),
-	register:        make(chan *Conn),
-	unregister:      make(chan *Conn),
-	create:          make(chan *Conn),
-	move:            make(chan Move),
-	join:            make(chan Join),
-}
-
-type Move struct {
-	Conn *Conn
-	move string
-}
-
-type Join struct {
-	Conn   *Conn
-	GameID string
 }
 
 //whatever you want to send back
@@ -62,120 +36,121 @@ type ErrResponse struct {
 	Message string `json:"message"`
 }
 
-func (h *Hub) run() {
-	log.Println("Hub is Listening")
-	defer log.Println("Hub is dead")
-	//TODO: put the cases in their own func/file
-	//TODO: resign, draw
-	for {
-		select {
-		case conn := <-h.register:
-			log.Println("New connection: ", conn)
+type Move struct {
+	Conn *Conn
+	move string
+}
 
-		case conn := <-h.create:
-			log.Println("New Game Created By: ", conn)
-			gameID := RandStringRunes(5)
-			log.Println("Game ID:", gameID)
-			h.games[gameID] = &Game{
-				id:      gameID,
-				game:    chess.NewGame(),
-				white:   conn, //TODO: optionally create with color
-				ongoing: true,
-			}
-			h.gameConnections[conn] = gameID
-			conn.send <- newResponse(h.games[gameID].game, gameID, "Game Created")
+type Join struct {
+	Conn   *Conn
+	GameID string
+}
 
-		case join := <-h.join:
-			conn := join.Conn
-			log.Println(conn, "trying to join", join.GameID)
-			if g, ok := h.games[join.GameID]; ok {
-				if g.black != nil && g.white != nil {
-					conn.send <- ErrResponse{Message: "Game already fulled"}
-					break
-				}
-				var color string
-				if g.white == nil {
-					g.white = conn
-					color = "white"
-				} else {
-					g.black = conn
-					color = "black"
-				}
-				h.gameConnections[conn] = join.GameID
+func (g *Games) create(conn *Conn) {
+	log.Println("New Game Created By: ", conn)
+	gameID := RandStringRunes(5)
+	log.Println("Game ID:", gameID)
+	g.games[gameID] = &Game{
+		id:      gameID,
+		game:    chess.NewGame(),
+		white:   conn, //TODO: optionally create with color
+		ongoing: true,
+	}
+	g.gameConnections[conn] = gameID
+	conn.send <- newResponse(g.games[gameID].game, gameID, "Game Created")
+}
 
-				log.Println(conn, "join Game:", join.GameID, "as", color)
-				conn.send <- newResponse(g.game, join.GameID, "Game joined as "+color)
-				res := newResponse(g.game, join.GameID, "Player join game")
-				if color == "w" && g.black != nil {
-					g.black.send <- res
-				} else if color == "b" && g.white != nil {
-					g.white.send <- res
-				}
+func (g *Games) join(j Join) {
+	conn, gameID := j.Conn, j.GameID
+	log.Println(conn, "trying to join", gameID)
+	if game, ok := g.games[gameID]; ok {
+		if game.black != nil && game.white != nil {
+			conn.send <- ErrResponse{Message: "Game already fulled"}
+			return
+		}
+		var color string
+		if game.white == nil {
+			game.white = conn
+			color = "white"
+		} else {
+			game.black = conn
+			color = "black"
+		}
+		g.gameConnections[conn] = gameID
 
-			}
+		log.Println(conn, "join Game:", gameID, "as", color)
+		conn.send <- newResponse(game.game, gameID, "Game joined as "+color)
+		res := newResponse(game.game, gameID, "Player join game")
+		if color == "w" && game.black != nil {
+			game.black.send <- res
+		} else if color == "b" && game.white != nil {
+			game.white.send <- res
+		}
 
-		case conn := <-h.unregister:
-			log.Println(conn, "unregister")
-			if id, ok := h.gameConnections[conn]; ok {
-				if g, ok := h.games[id]; ok {
-					if g.white == conn {
-						g.white = nil
-					} else {
-						g.black = nil
-					}
-				}
-				delete(h.gameConnections, conn)
-			}
+	}
+}
 
-		case m := <-h.move:
-			conn, move := m.Conn, m.move
-			log.Println(conn, "Plays", move)
-			gameID, ok := h.gameConnections[conn]
-			if !ok {
-				conn.send <- ErrResponse{
-					Message: "Not in a game",
-				}
-				break
-			}
-			g, ok := h.games[gameID]
-			if !ok {
-				conn.send <- ErrResponse{
-					Message: "Invalid Game ID",
-				}
-				break
-			}
-			if g.white != conn && g.black != conn {
-				conn.send <- ErrResponse{
-					Message: "You're not a player in this game!",
-				}
-				break
-			}
-			if g.game.Position().Turn() == chess.White && g.white != conn {
-				conn.send <- ErrResponse{
-					Message: "Not your turn",
-				}
-				break
-			}
-			if err := g.game.MoveStr(move); err != nil {
-				conn.send <- ErrResponse{
-					Message: "Invalid Move",
-				}
-				break
-			}
-			event := fmt.Sprintf("%s is played", move)
-			if g.game.Method() != chess.NoMethod {
-				event = fmt.Sprintf("Game Over: %v %v", g.game.Method(), g.game.Outcome())
-				g.ongoing = false
-				//TODO: delete the game or sth./ check g.ongoing b4 moving
-			}
-			res := newResponse(g.game, g.id, event)
-			if g.white != nil {
-				g.white.send <- res
-			}
-			if g.black != nil {
-				g.black.send <- res
+func (g *Games) leave(conn *Conn) {
+	log.Println(conn, "unregister")
+	if id, ok := g.gameConnections[conn]; ok {
+		if g, ok := g.games[id]; ok {
+			if g.white == conn {
+				g.white = nil
+			} else {
+				g.black = nil
 			}
 		}
+		delete(g.gameConnections, conn)
+	}
+}
+
+func (g *Games) move(m Move) {
+	conn, move := m.Conn, m.move
+	log.Println(conn, "Plays", move)
+	gameID, ok := g.gameConnections[conn]
+	if !ok {
+		conn.send <- ErrResponse{
+			Message: "Not in a game",
+		}
+		return
+	}
+	game, ok := g.games[gameID]
+	if !ok {
+		conn.send <- ErrResponse{
+			Message: "Invalid Game ID",
+		}
+		return
+	}
+	if game.white != conn && game.black != conn {
+		conn.send <- ErrResponse{
+			Message: "You're not a player in this game!",
+		}
+		return
+	}
+	if game.game.Position().Turn() == chess.White && game.white != conn {
+		conn.send <- ErrResponse{
+			Message: "Not your turn",
+		}
+		return
+	}
+	if err := game.game.MoveStr(move); err != nil {
+		conn.send <- ErrResponse{
+			Message: "Invalid Move",
+		}
+		return
+	}
+	event := fmt.Sprintf("%s is played", move)
+	if game.game.Method() != chess.NoMethod {
+		event = fmt.Sprintf("Game Over: %v %v", game.game.Method(), game.game.Outcome())
+		game.ongoing = false
+		//TODO: delete the game or sth./ check g.ongoing b4 moving
+	}
+	res := newResponse(game.game, game.id, event)
+	if game.white != nil {
+		game.white.send <- res
+	}
+	if game.black != nil {
+		game.black.send <- res
 	}
 }
 
