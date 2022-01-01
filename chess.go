@@ -121,6 +121,12 @@ func (g *Games) move(m Move) {
 		}
 		return
 	}
+	if !game.ongoing {
+		conn.send <- ErrResponse{
+			Message: fmt.Sprintf("Game Status: %v %v",game.game.Method(), game.game.Outcome()),
+		}
+		return
+	}
 	if game.white != conn && game.black != conn {
 		conn.send <- ErrResponse{
 			Message: "You're not a player in this game!",
