@@ -21,6 +21,15 @@
     flex-direction: column;
 }
 
+.side-bar {
+    position: relative;
+}
+
+.info {
+    position: absolute;
+    top: 100%;
+}
+
 #board {
     margin-top: 3rem;
 }
