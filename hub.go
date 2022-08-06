@@ -6,24 +6,21 @@ import (
 
 //Hub maintains set of ongoing games/ events
 type Hub struct {
-	games      *Games
-	register   chan *Conn
-	unregister chan *Conn
-	create     chan *Conn
-	join       chan Join
-	move       chan Move
+	gameService *GameService
+	register    chan *Conn
+	unregister  chan *Conn
+	create      chan *Conn
+	join        chan JoinRequest
+	move        chan MoveRequest
 }
 
 var hub = Hub{
-	games: &Games{
-		games: make(map[string]*Game),
-		gameConnections: make(map[*Conn]string),
-	},
-	register:   make(chan *Conn),
-	unregister: make(chan *Conn),
-	create:     make(chan *Conn),
-	move:       make(chan Move),
-	join:       make(chan Join),
+	gameService: NewGameService(),
+	register:    make(chan *Conn),
+	unregister:  make(chan *Conn),
+	create:      make(chan *Conn),
+	move:        make(chan MoveRequest),
+	join:        make(chan JoinRequest),
 }
 
 func (h *Hub) run() {
@@ -36,16 +33,16 @@ func (h *Hub) run() {
 			log.Println("New connection: ", conn)
 
 		case conn := <-h.create:
-			hub.games.create(conn)
+			hub.gameService.create(conn)
 
 		case join := <-h.join:
-			hub.games.join(join)
+			hub.gameService.join(join)
 
 		case conn := <-h.unregister:
-			hub.games.leave(conn)
+			hub.gameService.leave(conn)
 
 		case move := <-h.move:
-			hub.games.move(move)
+			hub.gameService.move(move)
 		}
 	}
 }

@@ -49,9 +49,9 @@ func (c *Conn) readPump() {
 		case "create":
 			hub.create <- c
 		case "join":
-			hub.join <- Join{Conn: c, GameID: m.Data.GameID}
+			hub.join <- JoinRequest{Conn: c, GameID: m.Data.GameID}
 		case "move":
-			hub.move <- Move{Conn: c, move: m.Data.Move}
+			hub.move <- MoveRequest{Conn: c, move: m.Data.Move}
 		}
 
 	}

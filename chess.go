@@ -5,22 +5,126 @@ import (
 	"log"
 	"math/rand"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/notnil/chess"
 )
 
+type color string
+
+const (
+	white color = "WHITE"
+	black color = "BLACK"
+)
+
+// for additional player fields
+type Player struct {
+	conn  *Conn
+	color color
+}
+
+// allow multiple clients for a game, or kick out old ones?
 type Game struct {
 	id      string
 	game    *chess.Game
-	white   *Conn
-	black   *Conn
+	players map[color]Player
 	ongoing bool
 }
 
-type Games struct {
-	games           map[string]*Game
-	gameConnections map[*Conn]string
+// store map of gameID to games
+type GamesConnectionsMap struct {
+	mu       sync.RWMutex
+	gamesMap map[string]*Game
+}
+
+func (gm *GamesConnectionsMap) GetGame(gameID string) (Game, bool) {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+
+	game, ok := gm.gamesMap[gameID]
+	return *game, ok
+}
+
+func (gm *GamesConnectionsMap) CreateGame() string {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+
+	gameID := RandStringRunes(8)
+	gm.gamesMap[gameID] = &Game{
+		id:      gameID,
+		game:    chess.NewGame(),
+		players: make(map[color]Player),
+		ongoing: true,
+	}
+	log.Printf("Creating a Game, gameID=%s\n", gameID)
+	return gameID
+}
+
+func (gm *GamesConnectionsMap) JoinGame(gameID string, player Player) Game {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+
+	log.Printf("Joining a Game, gameID=%s color=%s\n", gameID, player.color)
+	if _, ok := gm.gamesMap[gameID]; ok {
+		gm.gamesMap[gameID].players[player.color] = player
+	}
+	return *gm.gamesMap[gameID]
+}
+
+func (gm *GamesConnectionsMap) MakeMove(gameID string, move string) (Game, error) {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+	game := gm.gamesMap[gameID]
+	log.Printf("Making a Move, gameID=%s move=%s\n", gameID, move)
+	if err := game.game.MoveStr(move); err != nil {
+		return Game{}, err
+	}
+	if game.game.Method() != chess.NoMethod {
+		game.ongoing = false
+	}
+	//TODO: delete the game or sth./ check g.ongoing b4 moving
+	return *game, nil
+}
+
+func (gm *GamesConnectionsMap) LeaveGame(gameID string, conn *Conn) {
+	gm.mu.Lock()
+	defer gm.mu.Lock()
+	log.Printf("Leaving a Game, gameID=%s\n", gameID)
+	if game, ok := gm.gamesMap[gameID]; ok {
+		var color color
+		for _, player := range game.players {
+			if player.conn == conn {
+				color = player.color
+				break
+			}
+		}
+		delete(gm.gamesMap[gameID].players, color)
+	}
+}
+
+type UserGameConnectionsMap struct {
+	mu               sync.RWMutex
+	gamesConnections map[*Conn]string //map connection to gameID, 1 game per connection
+}
+
+func (cm *UserGameConnectionsMap) Set(conn *Conn, gameID string) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	cm.gamesConnections[conn] = gameID
+}
+
+func (cm *UserGameConnectionsMap) UnSet(conn *Conn) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	delete(cm.gamesConnections, conn)
+}
+
+func (cm *UserGameConnectionsMap) Get(conn *Conn) (gameID string, ok bool) {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	gameID, ok = cm.gamesConnections[conn]
+	return
 }
 
 //whatever you want to send back
@@ -36,127 +140,115 @@ type ErrResponse struct {
 	Message string `json:"message"`
 }
 
-type Move struct {
+type MoveRequest struct {
 	Conn *Conn
 	move string
 }
 
-type Join struct {
+type JoinRequest struct {
 	Conn   *Conn
 	GameID string
 }
 
-func (g *Games) create(conn *Conn) {
-	log.Println("New Game Created By: ", conn)
-	gameID := RandStringRunes(5)
-	log.Println("Game ID:", gameID)
-	g.games[gameID] = &Game{
-		id:      gameID,
-		game:    chess.NewGame(),
-		white:   conn, //TODO: optionally create with color
-		ongoing: true,
-	}
-	g.gameConnections[conn] = gameID
-	conn.send <- newResponse(g.games[gameID].game, gameID, "Game Created")
+// should connectionsMap be inside GamesConnectionsMap struct?
+type GameService struct {
+	gamesMap       GamesConnectionsMap
+	connectionsMap UserGameConnectionsMap
 }
 
-func (g *Games) join(j Join) {
+func NewGameService() *GameService {
+	return &GameService{
+		gamesMap: GamesConnectionsMap{
+			gamesMap: make(map[string]*Game),
+		},
+		connectionsMap: UserGameConnectionsMap{
+			gamesConnections: make(map[*Conn]string),
+		},
+	}
+}
+
+func (g *GameService) create(conn *Conn) {
+	gameID := g.gamesMap.CreateGame()
+	g.gamesMap.JoinGame(gameID, Player{
+		conn:  conn,
+		color: white, //TODO: optionally create with color
+	})
+	g.connectionsMap.Set(conn, gameID)
+	conn.send <- newResponse(chess.NewGame(), gameID, "Game Created")
+}
+
+func (g *GameService) join(j JoinRequest) {
 	conn, gameID := j.Conn, j.GameID
 	log.Println(conn, "trying to join", gameID)
-	if game, ok := g.games[gameID]; ok {
-		if game.black != nil && game.white != nil {
-			conn.send <- ErrResponse{Message: "Game already fulled"}
-			return
-		}
-		var color string
-		if game.white == nil {
-			game.white = conn
-			color = "white"
-		} else {
-			game.black = conn
-			color = "black"
-		}
-		g.gameConnections[conn] = gameID
-
-		log.Println(conn, "join Game:", gameID, "as", color)
-		conn.send <- newResponse(game.game, gameID, "Game joined as "+color)
-		res := newResponse(game.game, gameID, "Player join game")
-		if color == "w" && game.black != nil {
-			game.black.send <- res
-		} else if color == "b" && game.white != nil {
-			game.white.send <- res
-		}
-
+	game := g.gamesMap.JoinGame(gameID, Player{
+		conn:  conn,
+		color: black, // TODO: can also specify join color
+	})
+	g.connectionsMap.Set(conn, gameID)
+	conn.send <- newResponse(game.game, gameID, fmt.Sprintf("Game joined as %s", black))
+	res := newResponse(game.game, gameID, "Player join game")
+	for _, player := range game.players {
+		player.conn.send <- res
 	}
 }
 
-func (g *Games) leave(conn *Conn) {
-	log.Println(conn, "unregister")
-	if id, ok := g.gameConnections[conn]; ok {
-		if g, ok := g.games[id]; ok {
-			if g.white == conn {
-				g.white = nil
-			} else {
-				g.black = nil
-			}
-		}
-		delete(g.gameConnections, conn)
+func (g *GameService) leave(conn *Conn) {
+	if gameID, ok := g.connectionsMap.Get(conn); ok {
+		g.gamesMap.LeaveGame(gameID, conn)
 	}
 }
 
-func (g *Games) move(m Move) {
+func (g *GameService) move(m MoveRequest) {
 	conn, move := m.Conn, m.move
-	log.Println(conn, "Plays", move)
-	gameID, ok := g.gameConnections[conn]
+	gameID, ok := g.connectionsMap.Get(conn)
 	if !ok {
-		conn.send <- ErrResponse{
-			Message: "Not in a game",
-		}
+		conn.send <- newErrorResponse("Not in a game")
 		return
 	}
-	game, ok := g.games[gameID]
+
+	// should the logic below be in  MakeMove func instead
+	game, ok := g.gamesMap.GetGame(gameID)
 	if !ok {
-		conn.send <- ErrResponse{
-			Message: "Invalid Game ID",
-		}
+		conn.send <- newErrorResponse("Game does not exists")
 		return
 	}
 	if !game.ongoing {
-		conn.send <- ErrResponse{
-			Message: fmt.Sprintf("Game Status: %v %v",game.game.Method(), game.game.Outcome()),
-		}
+		conn.send <- newErrorResponse(fmt.Sprintf("Game Status: %v %v", game.game.Method(), game.game.Outcome()))
 		return
 	}
-	if game.white != conn && game.black != conn {
-		conn.send <- ErrResponse{
-			Message: "You're not a player in this game!",
+
+	inGame := false
+	var color color
+	for _, player := range game.players {
+		if player.conn == conn {
+			inGame = true
+			color = player.color
+			break
 		}
+	}
+	if !inGame {
+		conn.send <- newErrorResponse("You're not a player in this game!")
 		return
 	}
-	if game.game.Position().Turn() == chess.White && game.white != conn {
-		conn.send <- ErrResponse{
-			Message: "Not your turn",
-		}
+
+	if game.game.Position().Turn() == chess.White && color != white {
+		conn.send <- newErrorResponse("Not your turn")
 		return
 	}
-	if err := game.game.MoveStr(move); err != nil {
-		conn.send <- ErrResponse{
-			Message: "Invalid Move",
-		}
+
+	game, err := g.gamesMap.MakeMove(gameID, move)
+	if err != nil {
+		conn.send <- newErrorResponse(err.Error())
 		return
 	}
+
 	event := fmt.Sprintf("%s is played", move)
 	if game.game.Method() != chess.NoMethod {
 		event = fmt.Sprintf("Game Over: %v %v", game.game.Method(), game.game.Outcome())
-		game.ongoing = false
-		//TODO: delete the game or sth./ check g.ongoing b4 moving
 	}
 	res := newResponse(game.game, game.id, event)
-	if game.white != nil {
-		game.white.send <- res
-	}
-	if game.black != nil {
-		game.black.send <- res
+	for _, player := range game.players {
+		player.conn.send <- res
 	}
 }
 
@@ -166,6 +258,12 @@ func newResponse(game *chess.Game, id string, event string) *Response {
 		Event:  event, //TODO: event enum?
 		FEN:    game.FEN(),
 		PGN:    strings.TrimSpace(game.String()),
+	}
+}
+
+func newErrorResponse(msg string) ErrResponse {
+	return ErrResponse{
+		Message: msg,
 	}
 }
 
