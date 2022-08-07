@@ -1,4 +1,4 @@
-package main
+package chess
 
 import (
 	"fmt"
@@ -271,8 +271,14 @@ func (g *GameService) move(m MoveRequest) {
 		event = fmt.Sprintf("Game Over: %v %v", game.game.Method(), game.game.Outcome())
 	}
 	res := newResponse(game.game, game.id, event)
-	for _, player := range game.players {
-		player.conn.send <- res
+
+	toColor := white
+	if player.color == white {
+		toColor = black
+	}
+
+	if p, ok := game.players[toColor]; ok {
+		p.conn.send <- res
 	}
 }
 

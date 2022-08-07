@@ -1,4 +1,4 @@
-package main
+package chess
 
 import (
 	"log"
@@ -15,6 +15,7 @@ var upgrader = websocket.Upgrader{
 
 type Conn struct {
 	ws   *websocket.Conn
+	hub  *Hub
 	send chan interface{}
 }
 
@@ -45,7 +46,7 @@ type Message struct {
 func (c *Conn) readPump(done chan struct{}) {
 	defer func() {
 		log.Println(c, "socket is closing")
-		hub.unregister <- c
+		c.hub.unregister <- c
 		c.ws.Close()
 	}()
 	defer close(done)
@@ -59,15 +60,15 @@ func (c *Conn) readPump(done chan struct{}) {
 		}
 		switch strings.ToLower(m.Action) {
 		case "create":
-			hub.create <- CreateRequest{Conn: c, SDP: m.Data.SDP}
+			c.hub.create <- CreateRequest{Conn: c, SDP: m.Data.SDP}
 		case "join":
-			hub.join <- JoinRequest{Conn: c, GameID: m.Data.GameID, SDP: m.Data.SDP}
+			c.hub.join <- JoinRequest{Conn: c, GameID: m.Data.GameID, SDP: m.Data.SDP}
 		case "move":
-			hub.move <- MoveRequest{Conn: c, move: m.Data.Move}
+			c.hub.move <- MoveRequest{Conn: c, move: m.Data.Move}
 		case "answer":
-			hub.answer <- AnswerRequest{Conn: c, SDP: m.Data.SDP}
+			c.hub.answer <- AnswerRequest{Conn: c, SDP: m.Data.SDP}
 		case "ice":
-			hub.ice <- IceRequest{Conn: c, Candidate: m.Data.Candidate}
+			c.hub.ice <- IceRequest{Conn: c, Candidate: m.Data.Candidate}
 		}
 
 	}
@@ -98,21 +99,25 @@ func (c *Conn) writePump(done chan struct{}) {
 	}
 }
 
-func wsHandler(w http.ResponseWriter, r *http.Request) {
-	log.Println("Trying to upgrade")
-	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
-	ws, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	conn := &Conn{
-		send: make(chan interface{}),
-		ws:   ws,
-	}
+func NewWSHandler(hub *Hub) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		log.Println("Trying to upgrade")
+		upgrader.CheckOrigin = func(r *http.Request) bool { return true }
+		ws, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Println(err)
+			return
+		}
 
-	done := make(chan struct{})
-	go conn.readPump(done)
-	go conn.writePump(done)
-	hub.register <- conn
+		conn := &Conn{
+			send: make(chan interface{}),
+			ws:   ws,
+			hub:  hub,
+		}
+		hub.register <- conn
+
+		done := make(chan struct{})
+		go conn.readPump(done)
+		go conn.writePump(done)
+	}
 }

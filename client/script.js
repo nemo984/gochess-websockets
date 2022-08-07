@@ -181,7 +181,6 @@ async function joinGame(id) {
 	}
 
 	pc.onicecandidate = event => {
-		console.log(event.candidate.toJSON())
 		if (event.candidate) {
 			ws.send(JSON.stringify({
 				action: "ice",

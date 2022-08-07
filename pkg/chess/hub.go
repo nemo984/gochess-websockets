@@ -1,4 +1,4 @@
-package main
+package chess
 
 import (
 	"log"
@@ -16,18 +16,20 @@ type Hub struct {
 	ice         chan IceRequest
 }
 
-var hub = Hub{
-	gameService: NewGameService(),
-	register:    make(chan *Conn),
-	unregister:  make(chan *Conn),
-	create:      make(chan CreateRequest),
-	move:        make(chan MoveRequest),
-	join:        make(chan JoinRequest),
-	answer:      make(chan AnswerRequest),
-	ice:         make(chan IceRequest),
+func NewHub() *Hub {
+	return &Hub{
+		gameService: NewGameService(),
+		register:    make(chan *Conn),
+		unregister:  make(chan *Conn),
+		create:      make(chan CreateRequest),
+		move:        make(chan MoveRequest),
+		join:        make(chan JoinRequest),
+		answer:      make(chan AnswerRequest),
+		ice:         make(chan IceRequest),
+	}
 }
 
-func (h *Hub) run() {
+func (h *Hub) Run() {
 	log.Println("Hub is Listening")
 	defer log.Println("Hub is dead")
 	//TODO: resign, draw
@@ -37,23 +39,24 @@ func (h *Hub) run() {
 			log.Println("New connection: ", conn)
 
 		case create := <-h.create:
-			hub.gameService.create(create)
+			h.gameService.create(create)
 
 		case join := <-h.join:
 			log.Println("trying to join")
-			hub.gameService.join(join)
+			h.gameService.join(join)
 
 		case conn := <-h.unregister:
-			hub.gameService.leave(conn)
+			log.Println("<-h.unregister ", conn)
+			//hub.gameService.leave(conn) #TODO: fix lock bug
 
 		case move := <-h.move:
-			hub.gameService.move(move)
+			h.gameService.move(move)
 
 		case answer := <-h.answer:
-			hub.gameService.answer(answer)
+			h.gameService.answer(answer)
 
 		case ice := <-h.ice:
-			hub.gameService.ice(ice)
+			h.gameService.ice(ice)
 		}
 	}
 }
