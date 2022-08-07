@@ -24,7 +24,6 @@ type Player struct {
 	gameID string
 	color  color
 	sdp    SDP
-	ice    string
 }
 
 // allow multiple clients for a game, or kick out old ones?
@@ -127,10 +126,11 @@ func (cm *UserGameConnectionsMap) Get(conn *Conn) (player Player, ok bool) {
 
 //whatever you want to send back
 type Response struct {
-	GameID string `json:"id"`
-	Event  string `json:"event"`
-	FEN    string `json:"fen"`
-	PGN    string `json:"pgn"`
+	GameID    string `json:"id"`
+	Event     string `json:"event"`
+	FEN       string `json:"fen"`
+	PGN       string `json:"pgn"`
+	RemoteSDP SDP    `json:"sdp,omitempty"`
 }
 
 //Response in case of error
@@ -152,6 +152,11 @@ type JoinRequest struct {
 	Conn   *Conn
 	GameID string
 	SDP    SDP
+}
+
+type AnswerRequest struct {
+	Conn *Conn
+	SDP  SDP
 }
 
 // should connectionsMap be inside GamesConnectionsMap struct?
@@ -201,10 +206,9 @@ func (g *GameService) join(j JoinRequest) {
 	}
 
 	g.connectionsMap.Set(conn, player)
-	conn.send <- newResponse(game.game, gameID, fmt.Sprintf("Game joined as %s", black))
-	res := newResponse(game.game, gameID, "Player join game")
-	for _, player := range game.players {
-		player.conn.send <- res
+	if white, ok := game.players[white]; ok {
+		white.conn.send <- newResponse(game.game, gameID, "Player join game")
+		conn.send <- newSDPResponse(game, fmt.Sprintf("Game joined as %s", black), white.sdp)
 	}
 }
 
@@ -266,12 +270,46 @@ func (g *GameService) move(m MoveRequest) {
 	}
 }
 
+func (g *GameService) answer(a AnswerRequest) {
+	conn, sdp := a.Conn, a.SDP
+	player, ok := g.connectionsMap.Get(conn)
+	if !ok {
+		conn.send <- newErrorResponse("Not in a game")
+		return
+	}
+
+	game, ok := g.gamesMap.GetGame(player.gameID)
+	if !ok {
+		conn.send <- newErrorResponse("Game does not exists")
+		return
+	}
+
+	toColor := white
+	if player.color == white {
+		toColor = black
+	}
+
+	if p, ok := game.players[toColor]; ok {
+		p.conn.send <- newSDPResponse(game, "answer", sdp)
+	}
+}
+
 func newResponse(game *chess.Game, id string, event string) *Response {
 	return &Response{
 		GameID: id,
 		Event:  event, //TODO: event enum?
 		FEN:    game.FEN(),
 		PGN:    strings.TrimSpace(game.String()),
+	}
+}
+
+func newSDPResponse(game Game, event string, remoteSDP SDP) *Response {
+	return &Response{
+		GameID:    game.id,
+		Event:     event,
+		FEN:       game.game.FEN(),
+		PGN:       strings.TrimSpace(game.game.String()),
+		RemoteSDP: remoteSDP,
 	}
 }
 

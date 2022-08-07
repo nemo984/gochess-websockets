@@ -152,7 +152,7 @@ updateStatus();
 host = window.location.hostname + ":" + window.location.port;
 ws = new WebSocket(`ws://${host}/ws`);
 
-function joinGame(id) {
+async function joinGame(id) {
 	if (ws.readyState === WebSocket.CLOSED || ws.readyState == WebSocket.CLOSIN) {
 		alert("Websocket is closed");
 		ws = new WebSocket(`ws://${host}/ws`);
@@ -161,7 +161,6 @@ function joinGame(id) {
 		alert("GAME ID INPUT IS EMPTY");
 	}
 
-	const answerDescription = ""
 	pc.onicecandidate = event => {
 		console.log(event.candidate.toJSON())
 		if (event.candidate) {
@@ -172,29 +171,14 @@ function joinGame(id) {
 		}
 	}
 
-
-	pc.createAnswer()
-		.then(answer => {
-			const answerDescription = answer
-			pc.setLocalDescription(answerDescription)
-				.then(() => {
-					const answer = {
-						sdp: answerDescription.sdp,
-						type: answerDescription.type
-					}
-					console.log(answer)
-					ws.send(
-						JSON.stringify({
-							action: "join",
-							data: {
-								id: id,
-								sdp: answer,
-							},
-						})
-					);
-				})
+	ws.send(
+		JSON.stringify({
+			action: "join",
+			data: {
+				id: id,
+			},
 		})
-
+	);
 }
 
 ws.onopen = (e) => {
@@ -204,7 +188,7 @@ ws.onopen = (e) => {
 	}
 };
 
-ws.onmessage = (e) => {
+ws.onmessage = async (e) => {
 	json = JSON.parse(e.data);
 	console.log(json);
 
@@ -235,13 +219,31 @@ ws.onmessage = (e) => {
 			case "Game joined as black":
 				myColor = "b";
 				board.flip();
+				const offerDescription = json.sdp
+				console.log(offerDescription)
+				await pc.setRemoteDescription(new RTCSessionDescription(offerDescription))
+
+				const answerDescription = await pc.createAnswer()
+				await pc.setLocalDescription(answerDescription)
+
+				const answer = {
+					type: answerDescription.type,
+					sdp: answerDescription.sdp,
+				}
+				console.log("game joined, create answer")
+				console.log(answer)
+				ws.send(
+					JSON.stringify({
+						action: "answer",
+						data: {
+							sdp: answer,
+						},
+					})
+				);
 				break;
 
-			case "Player join game":
-				if (!pc.currentRemoteDescription && json?.answer) {
-					const answerDescription = new RTCSessionDescription(json.answer)
-					pc.setRemoteDescription(answerDescription)
-				}
+			case "answer":
+				await pc.setRemoteDescription(json.sdp)
 				break;
 
 			case "ICE":
