@@ -14,8 +14,8 @@ import (
 type color string
 
 const (
-	white color = "WHITE"
-	black color = "BLACK"
+	white color = "white"
+	black color = "black"
 )
 
 // for additional player fields
@@ -61,15 +61,17 @@ func (gm *GamesConnectionsMap) CreateGame() string {
 	return gameID
 }
 
-func (gm *GamesConnectionsMap) JoinGame(gameID string, player Player) Game {
+func (gm *GamesConnectionsMap) JoinGame(gameID string, player Player) (Game, error) {
 	gm.mu.Lock()
 	defer gm.mu.Unlock()
 
 	log.Printf("Joining a Game, gameID=%s color=%s\n", gameID, player.color)
-	if _, ok := gm.gamesMap[gameID]; ok {
-		gm.gamesMap[gameID].players[player.color] = player
+	game, ok := gm.gamesMap[gameID]
+	if !ok {
+		return Game{}, fmt.Errorf("Game '%v' doesn't exists", gameID)
 	}
-	return *gm.gamesMap[gameID]
+	gm.gamesMap[gameID].players[player.color] = player
+	return *game, nil
 }
 
 func (gm *GamesConnectionsMap) MakeMove(gameID string, move string) (Game, error) {
@@ -180,10 +182,15 @@ func (g *GameService) create(conn *Conn) {
 func (g *GameService) join(j JoinRequest) {
 	conn, gameID := j.Conn, j.GameID
 	log.Println(conn, "trying to join", gameID)
-	game := g.gamesMap.JoinGame(gameID, Player{
+	game, err := g.gamesMap.JoinGame(gameID, Player{
 		conn:  conn,
 		color: black, // TODO: can also specify join color
 	})
+	if err != nil {
+		conn.send <- newErrorResponse(err.Error())
+		return
+	}
+
 	g.connectionsMap.Set(conn, gameID)
 	conn.send <- newResponse(game.game, gameID, fmt.Sprintf("Game joined as %s", black))
 	res := newResponse(game.game, gameID, "Player join game")
@@ -262,6 +269,7 @@ func newResponse(game *chess.Game, id string, event string) *Response {
 }
 
 func newErrorResponse(msg string) ErrResponse {
+	log.Printf("error: %s\n", msg)
 	return ErrResponse{
 		Message: msg,
 	}

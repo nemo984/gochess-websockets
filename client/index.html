@@ -1,58 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <link
-            rel="stylesheet"
-            href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css"
-            integrity="sha384-q94+BZtLrkL1/ohfjR8c6L+A6qzNH9R2hBLwyoAfu3i/WCvQjzL2RQJ3uNHDISdU"
-            crossorigin="anonymous"
-        />
-        <link rel="stylesheet" href="styles.css" />
-        <script
-            src="https://code.jquery.com/jquery-3.5.1.min.js"
-            integrity="sha384-ZvpUoO/+PpLXR1lu4jmpXWu80pZlYUAfxl5NsBMWOEPSjUn/6Z/hRTt8+pR6L4N2"
-            crossorigin="anonymous"
-        ></script>
-        <script
-            src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"
-            integrity="sha384-8Vi8VHwn3vjQ9eUHUxex3JSN/NFqUg3QbPyX8kWyb93+8AC/pPWTzj+nHtbC5bxD"
-            crossorigin="anonymous"
-        ></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
 
-        <link rel="shortcut icon" href="img/favicon.ico" />
-        <meta charset="UTF-8" />
-        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Client Example</title>
-    </head>
-    <body>
-        <div class="container">
-            <div class="game">
-                <div id="board" style="width: 400px"></div>
-                <div class="side-bar">
-                    <button id="flipOrientationBtn">Flip</button>
-                    <div class="info">
-                        <label>Game ID:</label>
-                        <div id="game_id"></div>
-                        <label>Status:</label>
-                        <div id="status"></div>
-                        <label>FEN:</label>
-                        <div id="fen"></div>
-                        <label>PGN:</label>
-                        <div id="pgn"></div>
-                    </div>
-                </div>
-            </div>
-            <div class="create">
-                <button class="createBtn btn">Create Game</button>
-            </div>
-            <div class="join">
-                <button class="joinBtn btn">Join Game</button>
-                <input type="text" placeholder="Game ID" id="game_id_input" />
-            </div>
-            <button class="leaveBtn btn">Leave Game</button>
-        </div>
-    </body>
-    <script src="script.js"></script>
+<head>
+	<link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css"
+		integrity="sha384-q94+BZtLrkL1/ohfjR8c6L+A6qzNH9R2hBLwyoAfu3i/WCvQjzL2RQJ3uNHDISdU" crossorigin="anonymous" />
+	<link rel="stylesheet" href="styles.css" />
+	<script src="https://code.jquery.com/jquery-3.5.1.min.js"
+		integrity="sha384-ZvpUoO/+PpLXR1lu4jmpXWu80pZlYUAfxl5NsBMWOEPSjUn/6Z/hRTt8+pR6L4N2"
+		crossorigin="anonymous"></script>
+	<script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"
+		integrity="sha384-8Vi8VHwn3vjQ9eUHUxex3JSN/NFqUg3QbPyX8kWyb93+8AC/pPWTzj+nHtbC5bxD"
+		crossorigin="anonymous"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
+
+	<link rel="shortcut icon" href="img/favicon.ico" />
+	<meta charset="UTF-8" />
+	<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Client Example</title>
+</head>
+
+<body>
+	<div class="container">
+		<div class="videos">
+			<span>
+				<h3>You</h3>
+				<video id="webcamVideo" autoplay playsinline></video>
+			</span>
+			<span>
+				<h3>Your Opponent</h3>
+				<video id="remoteVideo" autoplay playsinline></video>
+			</span>
+		</div>
+		<div class="game">
+			<div id="board" style="width: 400px"></div>
+			<div class="side-bar">
+				<button id="flipOrientationBtn">Flip</button>
+				<div class="info">
+					<label>Game ID:</label>
+					<div id="game_id"></div>
+					<label>Status:</label>
+					<div id="status"></div>
+					<label>Your Color:</label>
+					<div id="myColor"></div>
+					<label>FEN:</label>
+					<div id="fen"></div>
+					<label>PGN:</label>
+					<div id="pgn"></div>
+				</div>
+			</div>
+		</div>
+		<div class="create">
+			<button class="createBtn btn">Create Game</button>
+		</div>
+		<div class="join">
+			<button class="joinBtn btn">Join Game</button>
+			<input type="text" placeholder="Game ID" id="game_id_input" />
+		</div>
+		<button class="leaveBtn btn">Leave Game</button>
+	</div>
+</body>
+<script src="script.js"></script>
+
 </html>

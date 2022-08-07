@@ -1,60 +1,64 @@
 * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
 }
 
 .container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    flex-direction: column;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	flex-direction: column;
 }
 
 .game {
-    display: flex;
-    align-items: center;
+	display: flex;
+	align-items: center;
 }
 
 .side-bar {
-    display: flex;
-    flex-direction: column;
+	display: flex;
+	flex-direction: column;
 }
 
 .side-bar {
-    position: relative;
+	position: relative;
 }
 
 .info {
-    position: absolute;
-    top: 100%;
+	position: absolute;
+	top: 100%;
 }
 
 #board {
-    margin-top: 3rem;
+	margin-top: 3rem;
 }
 
 #flipOrientationBtn {
-    cursor: pointer;
-    background-color: grey;
-    height: 40px;
-    width: 100px;
+	cursor: pointer;
+	background-color: grey;
+	height: 40px;
+	width: 100px;
 }
 
 .create {
-    display: flex;
+	display: flex;
 }
 
 .btn {
-    margin-top: 1rem;
-    cursor: pointer;
-    background-color: beige;
-    border: none;
-    height: 40px;
-    width: 100px;
+	margin-top: 1rem;
+	cursor: pointer;
+	background-color: beige;
+	border: none;
+	height: 40px;
+	width: 100px;
 }
 
 #pgn {
-    word-wrap: break-word;
-    width: 400px;
+	word-wrap: break-word;
+	width: 400px;
+}
+
+video {
+	border: 1px solid black;
 }

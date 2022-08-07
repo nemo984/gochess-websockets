@@ -26,6 +26,10 @@ type Data struct {
 type Message struct {
 	Action string `json:"action"`
 	Data   Data   `json:"data,omitempty"`
+	Offer  struct {
+		SDP  string `json:"sdp"`
+		Type string `json:"type"`
+	} `json:"offer,omitempty"`
 }
 
 // readPump pumps messages from the websocket connection to the hub.
@@ -40,9 +44,7 @@ func (c *Conn) readPump() {
 		err := c.ws.ReadJSON(m)
 		log.Printf("Received %#v\n", m)
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
-				log.Printf("error: %v", err)
-			}
+			log.Printf("error: %v\n", err)
 			break
 		}
 		switch strings.ToLower(m.Action) {
