@@ -19,9 +19,16 @@ type Conn struct {
 }
 
 type Data struct {
-	GameID string `json:"id,omitempty"`
-	Move   string `json:"move,omitempty"`
-	SDP    SDP    `json:"sdp,omitempty"`
+	GameID    string    `json:"id,omitempty"`
+	Move      string    `json:"move,omitempty"`
+	SDP       SDP       `json:"sdp,omitempty"`
+	Candidate Candidate `json:"candidate,omitempty"`
+}
+
+type Candidate struct {
+	Candidate     string `json:"candidate"`
+	SDPMid        string `json:"sdpMid"`
+	SDPMLineIndex int    `json:"sdpMLineIndex"`
 }
 
 type SDP struct {
@@ -35,12 +42,13 @@ type Message struct {
 }
 
 // readPump pumps messages from the websocket connection to the hub.
-func (c *Conn) readPump() {
+func (c *Conn) readPump(done chan struct{}) {
 	defer func() {
 		log.Println(c, "socket is closing")
 		hub.unregister <- c
 		c.ws.Close()
 	}()
+	defer close(done)
 	for {
 		m := &Message{}
 		err := c.ws.ReadJSON(m)
@@ -58,6 +66,8 @@ func (c *Conn) readPump() {
 			hub.move <- MoveRequest{Conn: c, move: m.Data.Move}
 		case "answer":
 			hub.answer <- AnswerRequest{Conn: c, SDP: m.Data.SDP}
+		case "ice":
+			hub.ice <- IceRequest{Conn: c, Candidate: m.Data.Candidate}
 		}
 
 	}
@@ -69,12 +79,12 @@ func (c *Conn) write(mt int, payload []byte) error {
 }
 
 // writePump pumps messages from the hub to the websocket connection.
-func (c *Conn) writePump() {
-	defer func() {
-		c.ws.Close()
-	}()
+func (c *Conn) writePump(done chan struct{}) {
+	defer c.ws.Close()
 	for {
 		select {
+		case <-done:
+			return
 		case message, ok := <-c.send:
 			if !ok {
 				// The hub closed the channel.
@@ -100,9 +110,9 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		send: make(chan interface{}),
 		ws:   ws,
 	}
-	log.Println("Here>")
+
+	done := make(chan struct{})
+	go conn.readPump(done)
+	go conn.writePump(done)
 	hub.register <- conn
-	log.Println("<Here>")
-	go conn.readPump()
-	conn.writePump()
 }

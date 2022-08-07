@@ -126,11 +126,12 @@ func (cm *UserGameConnectionsMap) Get(conn *Conn) (player Player, ok bool) {
 
 //whatever you want to send back
 type Response struct {
-	GameID    string `json:"id"`
-	Event     string `json:"event"`
-	FEN       string `json:"fen"`
-	PGN       string `json:"pgn"`
-	RemoteSDP SDP    `json:"sdp,omitempty"`
+	GameID    string    `json:"id"`
+	Event     string    `json:"event"`
+	FEN       string    `json:"fen"`
+	PGN       string    `json:"pgn"`
+	RemoteSDP SDP       `json:"sdp,omitempty"`
+	Candidate Candidate `json:"candidate,omitempty"`
 }
 
 //Response in case of error
@@ -157,6 +158,11 @@ type JoinRequest struct {
 type AnswerRequest struct {
 	Conn *Conn
 	SDP  SDP
+}
+
+type IceRequest struct {
+	Conn      *Conn
+	Candidate Candidate
 }
 
 // should connectionsMap be inside GamesConnectionsMap struct?
@@ -294,6 +300,30 @@ func (g *GameService) answer(a AnswerRequest) {
 	}
 }
 
+func (g *GameService) ice(i IceRequest) {
+	conn, candidate := i.Conn, i.Candidate
+	player, ok := g.connectionsMap.Get(conn)
+	if !ok {
+		conn.send <- newErrorResponse("Not in a game")
+		return
+	}
+
+	game, ok := g.gamesMap.GetGame(player.gameID)
+	if !ok {
+		conn.send <- newErrorResponse("Game does not exists")
+		return
+	}
+
+	toColor := white
+	if player.color == white {
+		toColor = black
+	}
+
+	if p, ok := game.players[toColor]; ok {
+		p.conn.send <- newICEResponse(game, candidate)
+	}
+}
+
 func newResponse(game *chess.Game, id string, event string) *Response {
 	return &Response{
 		GameID: id,
@@ -313,6 +343,15 @@ func newSDPResponse(game Game, event string, remoteSDP SDP) *Response {
 	}
 }
 
+func newICEResponse(game Game, candidate Candidate) *Response {
+	return &Response{
+		GameID:    game.id,
+		Event:     "ice",
+		FEN:       game.game.FEN(),
+		PGN:       strings.TrimSpace(game.game.String()),
+		Candidate: candidate,
+	}
+}
 func newErrorResponse(msg string) ErrResponse {
 	log.Printf("error: %s\n", msg)
 	return ErrResponse{

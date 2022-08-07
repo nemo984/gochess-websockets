@@ -135,6 +135,7 @@ let remoteStream = null;
 		})
 	}
 
+	webcamVideo.muted = true
 	webcamVideo.srcObject = localStream
 	remoteVideo.srcObject = remoteStream
 })();
@@ -150,12 +151,30 @@ board = Chessboard("board", config);
 updateStatus();
 
 host = window.location.hostname + ":" + window.location.port;
-ws = new WebSocket(`ws://${host}/ws`);
+
+protocol = "wss"
+wsHost = `${protocol}://${host}/ws`
+var ws = null
+
+function startWebsocket() {
+	ws = new WebSocket(wsHost)
+
+	ws.onmessage = function (e) {
+		console.log('websocket message event:', e)
+	}
+
+	ws.onclose = function () {
+		// connection closed, discard old websocket and create a new one in 5s
+		ws = null
+		setTimeout(startWebsocket, 5000)
+	}
+}
+startWebsocket();
 
 async function joinGame(id) {
 	if (ws.readyState === WebSocket.CLOSED || ws.readyState == WebSocket.CLOSIN) {
 		alert("Websocket is closed");
-		ws = new WebSocket(`ws://${host}/ws`);
+		ws = new WebSocket(wsHost);
 	}
 	if (id === "") {
 		alert("GAME ID INPUT IS EMPTY");
@@ -165,8 +184,10 @@ async function joinGame(id) {
 		console.log(event.candidate.toJSON())
 		if (event.candidate) {
 			ws.send(JSON.stringify({
-				action: "offer",
-				candidate: event.candidate.toJSON()
+				action: "ice",
+				data: {
+					candidate: event.candidate.toJSON(),
+				},
 			}))
 		}
 	}
@@ -191,16 +212,6 @@ ws.onopen = (e) => {
 ws.onmessage = async (e) => {
 	json = JSON.parse(e.data);
 	console.log(json);
-
-	if (json.hasOwnProperty("answer")) {
-		const data = json.answer
-		if (!pc.currentRemoteDescription && data?.answer) {
-			const answerDescription = new RTCSessionDescription(data.answer);
-			pc.setRemoteDescription(answerDescription)
-		}
-		return
-	}
-
 
 	if (json.hasOwnProperty("pgn") && json.hasOwnProperty("id")) {
 		sessionStorage.setItem("id", json.id);
@@ -246,10 +257,10 @@ ws.onmessage = async (e) => {
 				await pc.setRemoteDescription(json.sdp)
 				break;
 
-			case "ICE":
-				const candidate = new RTCIceCandidate(json.data)
+			case "ice": // ice candidates
+				const candidate = new RTCIceCandidate(json.candidate)
 				pc.addIceCandidate(candidate)
-				return
+				break;
 		}
 		//Default: move event
 		//TODO: maybe also send back game status & color that play the move
@@ -278,15 +289,17 @@ $(".createBtn").on("click", async () => {
 	console.log(ws.readyState)
 	if (ws.readyState === WebSocket.CLOSED || ws.readyState == WebSocket.CLOSING) {
 		alert("Websocket is closed");
-		ws = new WebSocket(`ws://${host}/ws`);
+		ws = new WebSocket(wsHost);
 	}
 
 	pc.onicecandidate = event => {
-		console.log(event.candidate.toJSON())
 		if (event.candidate) {
+			console.log(event.candidate.toJSON())
 			ws.send(JSON.stringify({
-				action: "offer",
-				candidate: event.candidate.toJSON()
+				action: "ice",
+				data: {
+					candidate: event.candidate.toJSON(),
+				},
 			}))
 		}
 	}
@@ -299,7 +312,6 @@ $(".createBtn").on("click", async () => {
 		type: offerDescription.type
 	}
 
-	console.log(offer)
 	ws.send(
 		JSON.stringify({
 			action: "create",

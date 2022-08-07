@@ -13,6 +13,7 @@ type Hub struct {
 	join        chan JoinRequest
 	move        chan MoveRequest
 	answer      chan AnswerRequest
+	ice         chan IceRequest
 }
 
 var hub = Hub{
@@ -23,6 +24,7 @@ var hub = Hub{
 	move:        make(chan MoveRequest),
 	join:        make(chan JoinRequest),
 	answer:      make(chan AnswerRequest),
+	ice:         make(chan IceRequest),
 }
 
 func (h *Hub) run() {
@@ -49,8 +51,9 @@ func (h *Hub) run() {
 
 		case answer := <-h.answer:
 			hub.gameService.answer(answer)
-		default:
-			log.Println("wtf")
+
+		case ice := <-h.ice:
+			hub.gameService.ice(ice)
 		}
 	}
 }
