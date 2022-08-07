@@ -21,15 +21,17 @@ type Conn struct {
 type Data struct {
 	GameID string `json:"id,omitempty"`
 	Move   string `json:"move,omitempty"`
+	SDP    SDP    `json:"sdp,omitempty"`
+}
+
+type SDP struct {
+	SDP  string `json:"sdp"`
+	Type string `json:"type"`
 }
 
 type Message struct {
 	Action string `json:"action"`
 	Data   Data   `json:"data,omitempty"`
-	Offer  struct {
-		SDP  string `json:"sdp"`
-		Type string `json:"type"`
-	} `json:"offer,omitempty"`
 }
 
 // readPump pumps messages from the websocket connection to the hub.
@@ -49,7 +51,7 @@ func (c *Conn) readPump() {
 		}
 		switch strings.ToLower(m.Action) {
 		case "create":
-			hub.create <- c
+			hub.create <- CreateRequest{Conn: c, SDP: m.Data.SDP}
 		case "join":
 			hub.join <- JoinRequest{Conn: c, GameID: m.Data.GameID}
 		case "move":
@@ -85,6 +87,7 @@ func (c *Conn) writePump() {
 }
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("Trying to upgrade")
 	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -95,7 +98,9 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		send: make(chan interface{}),
 		ws:   ws,
 	}
+	log.Println("Here>")
 	hub.register <- conn
+	log.Println("<Here>")
 	go conn.readPump()
 	conn.writePump()
 }

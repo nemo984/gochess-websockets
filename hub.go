@@ -9,7 +9,7 @@ type Hub struct {
 	gameService *GameService
 	register    chan *Conn
 	unregister  chan *Conn
-	create      chan *Conn
+	create      chan CreateRequest
 	join        chan JoinRequest
 	move        chan MoveRequest
 }
@@ -18,7 +18,7 @@ var hub = Hub{
 	gameService: NewGameService(),
 	register:    make(chan *Conn),
 	unregister:  make(chan *Conn),
-	create:      make(chan *Conn),
+	create:      make(chan CreateRequest),
 	move:        make(chan MoveRequest),
 	join:        make(chan JoinRequest),
 }
@@ -32,8 +32,8 @@ func (h *Hub) run() {
 		case conn := <-h.register:
 			log.Println("New connection: ", conn)
 
-		case conn := <-h.create:
-			hub.gameService.create(conn)
+		case create := <-h.create:
+			hub.gameService.create(create)
 
 		case join := <-h.join:
 			hub.gameService.join(join)

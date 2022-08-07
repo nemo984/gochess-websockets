@@ -20,8 +20,11 @@ const (
 
 // for additional player fields
 type Player struct {
-	conn  *Conn
-	color color
+	conn   *Conn
+	gameID string
+	color  color
+	sdp    SDP
+	ice    string
 }
 
 // allow multiple clients for a game, or kick out old ones?
@@ -89,31 +92,24 @@ func (gm *GamesConnectionsMap) MakeMove(gameID string, move string) (Game, error
 	return *game, nil
 }
 
-func (gm *GamesConnectionsMap) LeaveGame(gameID string, conn *Conn) {
+func (gm *GamesConnectionsMap) LeaveGame(player Player) {
 	gm.mu.Lock()
 	defer gm.mu.Lock()
-	log.Printf("Leaving a Game, gameID=%s\n", gameID)
-	if game, ok := gm.gamesMap[gameID]; ok {
-		var color color
-		for _, player := range game.players {
-			if player.conn == conn {
-				color = player.color
-				break
-			}
-		}
-		delete(gm.gamesMap[gameID].players, color)
+	log.Printf("Leaving a Game, gameID=%s\n", player.gameID)
+	if _, ok := gm.gamesMap[player.gameID]; ok {
+		delete(gm.gamesMap[player.gameID].players, player.color)
 	}
 }
 
 type UserGameConnectionsMap struct {
 	mu               sync.RWMutex
-	gamesConnections map[*Conn]string //map connection to gameID, 1 game per connection
+	gamesConnections map[*Conn]Player //map connection to gameID, 1 game per connection
 }
 
-func (cm *UserGameConnectionsMap) Set(conn *Conn, gameID string) {
+func (cm *UserGameConnectionsMap) Set(conn *Conn, player Player) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
-	cm.gamesConnections[conn] = gameID
+	cm.gamesConnections[conn] = player
 }
 
 func (cm *UserGameConnectionsMap) UnSet(conn *Conn) {
@@ -122,10 +118,10 @@ func (cm *UserGameConnectionsMap) UnSet(conn *Conn) {
 	delete(cm.gamesConnections, conn)
 }
 
-func (cm *UserGameConnectionsMap) Get(conn *Conn) (gameID string, ok bool) {
+func (cm *UserGameConnectionsMap) Get(conn *Conn) (player Player, ok bool) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
-	gameID, ok = cm.gamesConnections[conn]
+	player, ok = cm.gamesConnections[conn]
 	return
 }
 
@@ -142,6 +138,11 @@ type ErrResponse struct {
 	Message string `json:"message"`
 }
 
+type CreateRequest struct {
+	Conn *Conn
+	SDP  SDP
+}
+
 type MoveRequest struct {
 	Conn *Conn
 	move string
@@ -150,6 +151,7 @@ type MoveRequest struct {
 type JoinRequest struct {
 	Conn   *Conn
 	GameID string
+	SDP    SDP
 }
 
 // should connectionsMap be inside GamesConnectionsMap struct?
@@ -164,34 +166,41 @@ func NewGameService() *GameService {
 			gamesMap: make(map[string]*Game),
 		},
 		connectionsMap: UserGameConnectionsMap{
-			gamesConnections: make(map[*Conn]string),
+			gamesConnections: make(map[*Conn]Player),
 		},
 	}
 }
 
-func (g *GameService) create(conn *Conn) {
+func (g *GameService) create(createReq CreateRequest) {
+	conn := createReq.Conn
 	gameID := g.gamesMap.CreateGame()
-	g.gamesMap.JoinGame(gameID, Player{
-		conn:  conn,
-		color: white, //TODO: optionally create with color
-	})
-	g.connectionsMap.Set(conn, gameID)
+	player := Player{
+		conn:   conn,
+		gameID: gameID,
+		color:  white, //TODO: optionally create with color
+		sdp:    createReq.SDP,
+	}
+	g.gamesMap.JoinGame(gameID, player)
+	g.connectionsMap.Set(conn, player)
 	conn.send <- newResponse(chess.NewGame(), gameID, "Game Created")
 }
 
 func (g *GameService) join(j JoinRequest) {
 	conn, gameID := j.Conn, j.GameID
 	log.Println(conn, "trying to join", gameID)
-	game, err := g.gamesMap.JoinGame(gameID, Player{
-		conn:  conn,
-		color: black, // TODO: can also specify join color
-	})
+	player := Player{
+		conn:   conn,
+		gameID: gameID,
+		color:  black, //TODO: optionally create with color
+		sdp:    j.SDP,
+	}
+	game, err := g.gamesMap.JoinGame(gameID, player)
 	if err != nil {
 		conn.send <- newErrorResponse(err.Error())
 		return
 	}
 
-	g.connectionsMap.Set(conn, gameID)
+	g.connectionsMap.Set(conn, player)
 	conn.send <- newResponse(game.game, gameID, fmt.Sprintf("Game joined as %s", black))
 	res := newResponse(game.game, gameID, "Player join game")
 	for _, player := range game.players {
@@ -200,21 +209,21 @@ func (g *GameService) join(j JoinRequest) {
 }
 
 func (g *GameService) leave(conn *Conn) {
-	if gameID, ok := g.connectionsMap.Get(conn); ok {
-		g.gamesMap.LeaveGame(gameID, conn)
+	if player, ok := g.connectionsMap.Get(conn); ok {
+		g.gamesMap.LeaveGame(player)
 	}
 }
 
 func (g *GameService) move(m MoveRequest) {
 	conn, move := m.Conn, m.move
-	gameID, ok := g.connectionsMap.Get(conn)
+	player, ok := g.connectionsMap.Get(conn)
 	if !ok {
 		conn.send <- newErrorResponse("Not in a game")
 		return
 	}
 
 	// should the logic below be in  MakeMove func instead
-	game, ok := g.gamesMap.GetGame(gameID)
+	game, ok := g.gamesMap.GetGame(player.gameID)
 	if !ok {
 		conn.send <- newErrorResponse("Game does not exists")
 		return
@@ -225,11 +234,9 @@ func (g *GameService) move(m MoveRequest) {
 	}
 
 	inGame := false
-	var color color
-	for _, player := range game.players {
-		if player.conn == conn {
+	for _, p := range game.players {
+		if p.conn == conn {
 			inGame = true
-			color = player.color
 			break
 		}
 	}
@@ -238,12 +245,12 @@ func (g *GameService) move(m MoveRequest) {
 		return
 	}
 
-	if game.game.Position().Turn() == chess.White && color != white {
+	if game.game.Position().Turn() == chess.White && player.color != white {
 		conn.send <- newErrorResponse("Not your turn")
 		return
 	}
 
-	game, err := g.gamesMap.MakeMove(gameID, move)
+	game, err := g.gamesMap.MakeMove(player.gameID, move)
 	if err != nil {
 		conn.send <- newErrorResponse(err.Error())
 		return

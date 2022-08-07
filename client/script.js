@@ -161,12 +161,40 @@ function joinGame(id) {
 		alert("GAME ID INPUT IS EMPTY");
 	}
 
-	ws.send(
-		JSON.stringify({
-			action: "join",
-			data: { id: id },
+	const answerDescription = ""
+	pc.onicecandidate = event => {
+		console.log(event.candidate.toJSON())
+		if (event.candidate) {
+			ws.send(JSON.stringify({
+				action: "offer",
+				candidate: event.candidate.toJSON()
+			}))
+		}
+	}
+
+
+	pc.createAnswer()
+		.then(answer => {
+			const answerDescription = answer
+			pc.setLocalDescription(answerDescription)
+				.then(() => {
+					const answer = {
+						sdp: answerDescription.sdp,
+						type: answerDescription.type
+					}
+					console.log(answer)
+					ws.send(
+						JSON.stringify({
+							action: "join",
+							data: {
+								id: id,
+								sdp: answer,
+							},
+						})
+					);
+				})
 		})
-	);
+
 }
 
 ws.onopen = (e) => {
@@ -202,11 +230,24 @@ ws.onmessage = (e) => {
 		switch (json.event) {
 			case ("Game Created", "Game joined as white"):
 				myColor = "w";
-				return;
+				break;
+
 			case "Game joined as black":
 				myColor = "b";
 				board.flip();
-				return;
+				break;
+
+			case "Player join game":
+				if (!pc.currentRemoteDescription && json?.answer) {
+					const answerDescription = new RTCSessionDescription(json.answer)
+					pc.setRemoteDescription(answerDescription)
+				}
+				break;
+
+			case "ICE":
+				const candidate = new RTCIceCandidate(json.data)
+				pc.addIceCandidate(candidate)
+				return
 		}
 		//Default: move event
 		//TODO: maybe also send back game status & color that play the move
@@ -238,6 +279,16 @@ $(".createBtn").on("click", async () => {
 		ws = new WebSocket(`ws://${host}/ws`);
 	}
 
+	pc.onicecandidate = event => {
+		console.log(event.candidate.toJSON())
+		if (event.candidate) {
+			ws.send(JSON.stringify({
+				action: "offer",
+				candidate: event.candidate.toJSON()
+			}))
+		}
+	}
+
 	const offerDescription = await pc.createOffer()
 	await pc.setLocalDescription(offerDescription)
 
@@ -247,11 +298,12 @@ $(".createBtn").on("click", async () => {
 	}
 
 	console.log(offer)
-
 	ws.send(
 		JSON.stringify({
 			action: "create",
-			offer: offer,
+			data: {
+				sdp: offer,
+			},
 		})
 	);
 });
