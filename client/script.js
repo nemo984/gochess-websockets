@@ -99,15 +99,18 @@ function updateStatus() {
 	$pgn.html(game.pgn());
 }
 
-const pcConfig = {
-	iceServers: [{ urls: "stun:74.125.142.127:19302" }],
-	iceCandidatePoolSize: 10
-}
-
 const webcamVideo = document.getElementById('webcamVideo')
 const remoteVideo = document.getElementById('remoteVideo')
 
-let pc = new RTCPeerConnection(pcConfig)
+let pc = new RTCPeerConnection({
+	iceServers: [
+		{
+			urls: "turn:openrelay.metered.ca:443",
+			username: "openrelayproject",
+			credential: "openrelayproject",
+		},
+	],
+})
 let localStream = null;
 let remoteStream = null;
 

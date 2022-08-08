@@ -19,7 +19,7 @@ const (
 )
 
 // for additional player fields
-// TODO: break up structs
+// TODO: break up structs, - 1 for game, 1 for connections (SDP, ICE)?
 type Player struct {
 	conn          *Conn
 	gameID        string
@@ -54,7 +54,7 @@ func (gm *GamesConnectionsMap) CreateGame() string {
 	gm.mu.Lock()
 	defer gm.mu.Unlock()
 
-	gameID := RandStringRunes(8)
+	gameID := RandStringRunes(5)
 	gm.gamesMap[gameID] = &Game{
 		id:      gameID,
 		game:    chess.NewGame(),
