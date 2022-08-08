@@ -99,21 +99,15 @@ function updateStatus() {
 	$pgn.html(game.pgn());
 }
 
-
-
-const servers = {
-	iceServers: [
-		{
-			urls: ['stun:stun1.l.google.com:19302', "stun:stun2.l.google.com:19302"],
-		},
-	],
+const pcConfig = {
+	iceServers: [{ urls: "stun:74.125.142.127:19302" }],
 	iceCandidatePoolSize: 10
 }
 
 const webcamVideo = document.getElementById('webcamVideo')
 const remoteVideo = document.getElementById('remoteVideo')
 
-let pc = new RTCPeerConnection(servers)
+let pc = new RTCPeerConnection(pcConfig)
 let localStream = null;
 let remoteStream = null;
 
@@ -152,7 +146,12 @@ updateStatus();
 
 host = window.location.hostname + ":" + window.location.port;
 
-protocol = "wss"
+protocol = "ws"
+if (location.hostname !== 'localhost') {
+	console.log("switch to wss & connect to TURN server")
+	protocol = "wss"
+}
+
 wsHost = `${protocol}://${host}/ws`
 var ws = null
 
@@ -181,6 +180,7 @@ async function joinGame(id) {
 	}
 
 	pc.onicecandidate = event => {
+		console.log(event.candidate.toJSON())
 		if (event.candidate) {
 			ws.send(JSON.stringify({
 				action: "ice",

@@ -19,11 +19,13 @@ const (
 )
 
 // for additional player fields
+// TODO: break up structs
 type Player struct {
-	conn   *Conn
-	gameID string
-	color  color
-	sdp    SDP
+	conn          *Conn
+	gameID        string
+	color         color
+	sdp           SDP
+	iceCandidates []Candidate
 }
 
 // allow multiple clients for a game, or kick out old ones?
@@ -124,6 +126,12 @@ func (cm *UserGameConnectionsMap) Get(conn *Conn) (player Player, ok bool) {
 	return
 }
 
+func (cm *UserGameConnectionsMap) AddICE(player Player, candidate Candidate) {
+	//lock>
+	player.iceCandidates = append(player.iceCandidates, candidate)
+	cm.gamesConnections[player.conn] = player
+}
+
 //whatever you want to send back
 type Response struct {
 	GameID    string    `json:"id"`
@@ -222,6 +230,7 @@ func (g *GameService) leave(conn *Conn) {
 	if player, ok := g.connectionsMap.Get(conn); ok {
 		g.gamesMap.LeaveGame(player)
 	}
+	// TODO: send leave event, discard ice candidates
 }
 
 func (g *GameService) move(m MoveRequest) {
@@ -303,12 +312,18 @@ func (g *GameService) answer(a AnswerRequest) {
 
 	if p, ok := game.players[toColor]; ok {
 		p.conn.send <- newSDPResponse(game, "answer", sdp)
+		if toPlayer, ok := g.connectionsMap.Get(p.conn); ok {
+			for _, candidate := range toPlayer.iceCandidates {
+				conn.send <- newICEResponse(game, candidate)
+			}
+		}
 	}
 }
 
 func (g *GameService) ice(i IceRequest) {
 	conn, candidate := i.Conn, i.Candidate
 	player, ok := g.connectionsMap.Get(conn)
+	g.connectionsMap.AddICE(player, candidate) // store to return to the answerer
 	if !ok {
 		conn.send <- newErrorResponse("Not in a game")
 		return
@@ -326,7 +341,7 @@ func (g *GameService) ice(i IceRequest) {
 	}
 
 	if p, ok := game.players[toColor]; ok {
-		p.conn.send <- newICEResponse(game, candidate)
+		p.conn.send <- newICEResponse(game, candidate) // can just send answer directly
 	}
 }
 
