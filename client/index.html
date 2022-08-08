@@ -32,32 +32,34 @@
 				<video id="remoteVideo" autoplay playsinline></video>
 			</span>
 		</div>
-		<div class="game">
-			<div id="board" style="width: 400px"></div>
-			<div class="side-bar">
-				<button id="flipOrientationBtn">Flip</button>
-				<div class="info">
-					<label>Game ID:</label>
-					<div id="game_id"></div>
-					<label>Status:</label>
-					<div id="status"></div>
-					<label>Your Color:</label>
-					<div id="myColor"></div>
-					<label>FEN:</label>
-					<div id="fen"></div>
-					<label>PGN:</label>
-					<div id="pgn"></div>
+		<div class="games">
+			<div class="game">
+				<div id="board" style="width: 400px"></div>
+				<div class="side-bar">
+					<button id="flipOrientationBtn">Flip</button>
+					<div class="info">
+						<label>Game ID:</label>
+						<div id="game_id"></div>
+						<label>Status:</label>
+						<div id="status"></div>
+						<label>Your Color:</label>
+						<div id="myColor"></div>
+						<label>FEN:</label>
+						<div id="fen"></div>
+						<label>PGN:</label>
+						<div id="pgn"></div>
+					</div>
 				</div>
 			</div>
+			<div class="create">
+				<button class="createBtn btn">Create Game</button>
+			</div>
+			<div class="join">
+				<button class="joinBtn btn">Join Game</button>
+				<input type="text" placeholder="Game ID" id="game_id_input" />
+			</div>
+			<button class="leaveBtn btn">Leave Game</button>
 		</div>
-		<div class="create">
-			<button class="createBtn btn">Create Game</button>
-		</div>
-		<div class="join">
-			<button class="joinBtn btn">Join Game</button>
-			<input type="text" placeholder="Game ID" id="game_id_input" />
-		</div>
-		<button class="leaveBtn btn">Leave Game</button>
 	</div>
 </body>
 <script src="script.js"></script>
